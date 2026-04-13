@@ -45,6 +45,8 @@ def main() -> None:
         model_path=cfg.piper_model_path,
         executable=cfg.piper_executable,
         config_path=cfg.piper_config_path,
+        remote_play_url=cfg.pi_play_url,
+        remote_timeout_sec=cfg.pi_play_timeout_sec,
         playback_backend=cfg.playback_backend,
         ffplay_executable=cfg.ffplay_executable,
     )
@@ -92,7 +94,10 @@ def main() -> None:
                 reply = "I did not generate a response."
             print(f"[assistant] {reply}")
 
-            tts.speak(reply)
+            try:
+                tts.speak(reply)
+            except Exception as exc:
+                print(f"[warn] TTS/playback failed: {exc}")
     except KeyboardInterrupt:
         print("\nInterrupted by user.")
     except Exception:

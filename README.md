@@ -1,8 +1,8 @@
-﻿# Local Voice Assistant (Offline, CPU-First)
+﻿# Local Voice Assistant + Raspberry Pi Speaker Output
 
-This project runs fully on your computer (no cloud APIs) with this pipeline:
+This project runs STT/LLM/TTS fully on your PC (no cloud APIs), then sends generated WAV audio to your Raspberry Pi playback server:
 
-Microphone -> Silero VAD -> faster-whisper STT -> TinyLlama (Ollama localhost API) -> Piper TTS -> Speaker
+Microphone -> Silero VAD -> faster-whisper STT -> TinyLlama (Ollama localhost API) -> Piper TTS (WAV) -> POST http://jmalpi.local:5000/play -> Raspberry Pi speakers
 
 ## What Is Already Done In This Folder
 
@@ -46,8 +46,14 @@ If you move this project to another machine, follow the full first-time setup be
 +---------+--------+
           |
           v
++----------------------------------+
+| POST /play on Raspberry Pi Flask |
+| http://jmalpi.local:5000/play    |
++---------+------------------------+
+          |
+          v
 +------------------+
-|     Speaker      |
+| Raspberry Speaker|
 +------------------+
 ```
 
@@ -203,6 +209,10 @@ macOS/Linux:
 
 The assistant runs continuously until you press `Ctrl+C`.
 
+During each response, the PC sends raw WAV bytes to your Raspberry Pi endpoint:
+
+- `POST http://jmalpi.local:5000/play`
+
 ## One-Time Model Warmup (Optional but Recommended)
 
 This pre-downloads model files so first voice request is faster.
@@ -227,6 +237,15 @@ macOS/Linux:
 - If you manually set `VA_WHISPER_DEVICE=cuda` but CUDA is unavailable, the app falls back automatically to:
   - `device=cpu`
   - `compute_type=int8`
+
+## Raspberry Pi Playback Server Settings
+
+Set these in `.env`:
+
+- `VA_PI_PLAY_URL=http://jmalpi.local:5000/play`
+- `VA_PI_PLAY_TIMEOUT=30`
+
+The assistant posts `audio/wav` in the request body, matching your Raspberry Pi Flask server contract.
 
 ## Performance Expectations (Typical)
 

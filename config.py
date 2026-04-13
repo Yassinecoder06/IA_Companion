@@ -52,6 +52,9 @@ class AssistantConfig:
     )
     piper_config_path: str | None = os.getenv("VA_PIPER_CONFIG")
 
+    pi_play_url: str = os.getenv("VA_PI_PLAY_URL", "http://jmalpi.local:5000/play")
+    pi_play_timeout_sec: int = int(os.getenv("VA_PI_PLAY_TIMEOUT", "120"))
+
     playback_backend: str = os.getenv("VA_PLAYBACK_BACKEND", "sounddevice")
     ffplay_executable: str = os.getenv("VA_FFPLAY_BIN", "ffplay")
 
