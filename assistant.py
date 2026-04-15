@@ -14,6 +14,15 @@ from vad.silero_vad import SileroVAD
 
 def main() -> None:
     cfg = AssistantConfig()
+    
+    # Diagnostics: show loaded config
+    print("[config] Loaded settings:")
+    print(f"  Whisper: {cfg.whisper_model_size} on {cfg.whisper_device} ({cfg.whisper_compute_type})")
+    print(f"  Ollama: {cfg.ollama_model} at {cfg.ollama_url}")
+    print(f"  Piper: {cfg.piper_executable} with model {cfg.piper_model_path}")
+    print(f"  Pi playback: {cfg.pi_play_url} (timeout {cfg.pi_play_timeout_sec}s)")
+    print()
+    
     if cfg.whisper_device.lower() == "cuda" and not torch.cuda.is_available():
         print("[warn] CUDA requested but not available. Falling back to CPU int8 for faster-whisper.")
         cfg.whisper_device = "cpu"
@@ -62,7 +71,7 @@ def main() -> None:
         max_utterance_chunks=max(1, int(cfg.max_utterance_seconds * cfg.sample_rate / chunk_size)),
     )
 
-    print("Warming up TinyLlama in Ollama...")
+    print(f"Warming up {cfg.ollama_model} in Ollama...")
     try:
         llm.warmup()
     except Exception as exc:

@@ -15,8 +15,15 @@ def _load_dotenv(dotenv_path: str = ".env") -> None:
 
         key, value = line.split("=", 1)
         key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+        value = value.strip()
+
+        if value and value[0] not in {'"', "'"}:
+            comment_index = value.find(" #")
+            if comment_index != -1:
+                value = value[:comment_index].rstrip()
+
+        value = value.strip('"').strip("'")
+        os.environ[key] = value
 
 
 _load_dotenv()

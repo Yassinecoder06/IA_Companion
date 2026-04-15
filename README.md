@@ -47,7 +47,7 @@ If you move this project to another machine, follow the full first-time setup be
           |
           v
 +----------------------------------+
-| POST /play on Raspberry Pi Flask |
+| POST /play on Raspberry Pi |
 | http://jmalpi.local:5000/play    |
 +---------+------------------------+
           |
