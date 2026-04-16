@@ -26,6 +26,13 @@ def _load_dotenv(dotenv_path: str = ".env") -> None:
         os.environ[key] = value
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 _load_dotenv()
 
 
@@ -51,6 +58,7 @@ class AssistantConfig:
     ollama_model: str = os.getenv("VA_OLLAMA_MODEL", "tinyllama")
     ollama_keep_alive: str = os.getenv("VA_OLLAMA_KEEP_ALIVE", "30m")
     ollama_timeout_sec: int = int(os.getenv("VA_OLLAMA_TIMEOUT", "90"))
+    ollama_system_prompt: str = os.getenv("VA_OLLAMA_SYSTEM_PROMPT", "")
 
     piper_executable: str = os.getenv("VA_PIPER_BIN", "piper")
     piper_model_path: str = os.getenv(
@@ -61,6 +69,9 @@ class AssistantConfig:
 
     pi_play_url: str = os.getenv("VA_PI_PLAY_URL", "http://jmalpi.local:5000/play")
     pi_play_timeout_sec: int = int(os.getenv("VA_PI_PLAY_TIMEOUT", "120"))
+    pi_ws_enabled: bool = _env_bool("VA_PI_WS_ENABLED", False)
+    pi_ws_url: str = os.getenv("VA_PI_WS_URL", "")
+    pi_ws_timeout_sec: int = int(os.getenv("VA_PI_WS_TIMEOUT", "15"))
 
     playback_backend: str = os.getenv("VA_PLAYBACK_BACKEND", "sounddevice")
     ffplay_executable: str = os.getenv("VA_FFPLAY_BIN", "ffplay")

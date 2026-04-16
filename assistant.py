@@ -19,8 +19,10 @@ def main() -> None:
     print("[config] Loaded settings:")
     print(f"  Whisper: {cfg.whisper_model_size} on {cfg.whisper_device} ({cfg.whisper_compute_type})")
     print(f"  Ollama: {cfg.ollama_model} at {cfg.ollama_url}")
+    print(f"  System prompt enabled: {bool(cfg.ollama_system_prompt.strip())}")
     print(f"  Piper: {cfg.piper_executable} with model {cfg.piper_model_path}")
     print(f"  Pi playback: {cfg.pi_play_url} (timeout {cfg.pi_play_timeout_sec}s)")
+    print(f"  Pi websocket: enabled={cfg.pi_ws_enabled} url={cfg.pi_ws_url or '(not set)'}")
     print()
     
     if cfg.whisper_device.lower() == "cuda" and not torch.cuda.is_available():
@@ -47,6 +49,7 @@ def main() -> None:
         model=cfg.ollama_model,
         keep_alive=cfg.ollama_keep_alive,
         timeout_sec=cfg.ollama_timeout_sec,
+        system_prompt=cfg.ollama_system_prompt,
     )
 
     print("Loading Piper TTS...")
@@ -56,6 +59,9 @@ def main() -> None:
         config_path=cfg.piper_config_path,
         remote_play_url=cfg.pi_play_url,
         remote_timeout_sec=cfg.pi_play_timeout_sec,
+        remote_ws_enabled=cfg.pi_ws_enabled,
+        remote_ws_url=cfg.pi_ws_url,
+        remote_ws_timeout_sec=cfg.pi_ws_timeout_sec,
         playback_backend=cfg.playback_backend,
         ffplay_executable=cfg.ffplay_executable,
     )

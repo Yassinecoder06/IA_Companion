@@ -6,6 +6,7 @@ import wave
 from pathlib import Path
 
 import requests
+import websocket
 
 from utils.audio_utils import play_wav_file
 
@@ -18,6 +19,9 @@ class PiperEngine:
         config_path: str | None = None,
         remote_play_url: str | None = None,
         remote_timeout_sec: int = 30,
+        remote_ws_enabled: bool = False,
+        remote_ws_url: str | None = None,
+        remote_ws_timeout_sec: int = 15,
         playback_backend: str = "sounddevice",
         ffplay_executable: str = "ffplay",
     ) -> None:
@@ -26,6 +30,9 @@ class PiperEngine:
         self.config_path = config_path
         self.remote_play_url = remote_play_url.strip() if remote_play_url else None
         self.remote_timeout_sec = remote_timeout_sec
+        self.remote_ws_enabled = remote_ws_enabled
+        self.remote_ws_url = remote_ws_url.strip() if remote_ws_url else None
+        self.remote_ws_timeout_sec = remote_ws_timeout_sec
         self.playback_backend = playback_backend
         self.ffplay_executable = ffplay_executable
         self.session = requests.Session()
@@ -63,8 +70,31 @@ class PiperEngine:
                 check=True,
             )
 
+            wav_bytes = Path(wav_path).read_bytes()
+
+            if self.remote_ws_enabled and self.remote_ws_url:
+                try:
+                    ws = websocket.create_connection(
+                        self.remote_ws_url,
+                        timeout=self.remote_ws_timeout_sec,
+                    )
+                    try:
+                        ws.send_binary(wav_bytes)
+                        ack = ws.recv()
+                        if isinstance(ack, (bytes, bytearray)):
+                            ack_text = ack.decode("utf-8", errors="ignore").strip()
+                        else:
+                            ack_text = str(ack).strip()
+
+                        if ack_text.lower() != "played":
+                            raise RuntimeError(f"Unexpected WS ack: {ack_text}")
+                    finally:
+                        ws.close()
+                    return
+                except Exception as exc:
+                    print(f"[warn] WebSocket playback failed, falling back to HTTP: {exc}")
+
             if self.remote_play_url:
-                wav_bytes = Path(wav_path).read_bytes()
                 # Your Raspberry Pi server replies only after playback completes,
                 # so read timeout must be longer than audio duration.
                 with wave.open(wav_path, "rb") as wf:
