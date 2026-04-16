@@ -1,0 +1,13 @@
+# Dependencies for:
+# - servers_in_pi/gpio_server.py
+# - servers_in_pi/audio_server.py
+
+RPi.GPIO>=0.7.1
+websockets>=12.0
+
+# Note:
+# gpio_server.py imports `smbus`, which is usually provided by the OS package
+# on Raspberry Pi OS rather than pip.
+# Install on Pi with:
+#   sudo apt update
+#   sudo apt install -y python3-smbus i2c-tools
