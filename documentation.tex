@@ -261,22 +261,6 @@ Important recently added keys:
     \item VA\_GYRO\_TIMEOUT
 \end{itemize}
 
-\section{Current Limitations}
-\begin{itemize}
-    \item Level 3 remains a placeholder mode and does not yet implement full educational logic.
-    \item README baseline documentation does not yet include all orientation-mode implementation details.
-    \item Orientation switching currently relies on immediate value changes and may benefit from debounce stability filtering.
-\end{itemize}
-
-\section{Future Improvements}
-\begin{itemize}
-    \item Move per-level prompt text into environment variables for no-code tuning.
-    \item Add orientation debounce and temporal filtering to reduce accidental mode flips.
-    \item Add startup health checks for sensor and playback endpoints.
-    \item Add tests for orientation normalization, mapping, and spoken rules behavior.
-    \item Add optional per-face debounce windows to reduce accidental rapid re-announcements.
-\end{itemize}
-
 \section{Conclusion}
 The IA Companion demonstrates a practical embedded AI assistant architecture that combines local speech intelligence, local language generation, hardware sensor integration, and educational mode adaptation. The implemented orientation-driven announcement and rules system establishes a strong foundation for physically interactive learning experiences while preserving a stable STEM assistant behavior. With incremental reliability enhancements and expanded game content, the platform can evolve into a robust multi-domain educational companion suitable for classrooms, labs, and interactive demonstrations.
 
