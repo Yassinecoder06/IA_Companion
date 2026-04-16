@@ -60,6 +60,10 @@ class AssistantConfig:
     ollama_timeout_sec: int = int(os.getenv("VA_OLLAMA_TIMEOUT", "90"))
     ollama_system_prompt: str = os.getenv("VA_OLLAMA_SYSTEM_PROMPT", "")
 
+    gyro_url: str = os.getenv("VA_GYRO_URL", "")
+    gyro_poll_interval_sec: float = float(os.getenv("VA_GYRO_POLL_INTERVAL", "0.1"))
+    gyro_timeout_sec: float = float(os.getenv("VA_GYRO_TIMEOUT", "1.0"))
+
     piper_executable: str = os.getenv("VA_PIPER_BIN", "piper")
     piper_model_path: str = os.getenv(
         "VA_PIPER_MODEL",

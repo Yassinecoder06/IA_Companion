@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import threading
+import time
 import traceback
+from dataclasses import dataclass
 
+import requests
 import torch
 
 from audio.recorder import VoiceRecorder
@@ -12,6 +16,84 @@ from tts.piper_engine import PiperEngine
 from vad.silero_vad import SileroVAD
 
 
+@dataclass(frozen=True)
+class LevelProfile:
+    name: str
+    announcement: str
+
+
+LEVEL_BY_ORIENTATION: dict[str, LevelProfile] = {
+    "front": LevelProfile(
+        name="Logic Gate Level",
+        announcement=(
+            "Logic gate level activated. "
+            "Logic Gates: Press the buttons to send signals through the logic circuit. "
+            "Your goal is to activate the final AND gate."
+        ),
+    ),
+    "right": LevelProfile(
+        name="Mirror Level",
+        announcement=(
+            "Mirror level activated. "
+            "Reflection: Cover the light sensor to send a signal that rotates the mirrors. "
+            "Adjust all three mirrors correctly to guide the light toward the prism and discover what "
+            "happens when light passes through it."
+        ),
+    ),
+    "back": LevelProfile(
+        name="Silent",
+        announcement="",
+    ),
+    "left": LevelProfile(
+        name="Silent",
+        announcement="",
+    ),
+}
+
+
+def _normalize_orientation(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = str(value).strip().lower()
+    return normalized if normalized in LEVEL_BY_ORIENTATION else None
+
+
+def _start_gyro_level_controller(
+    gyro_url: str,
+    timeout_sec: float,
+    poll_interval_sec: float,
+    tts: PiperEngine,
+    speak_lock: threading.Lock,
+) -> threading.Event:
+    stop_event = threading.Event()
+
+    def _worker() -> None:
+        session = requests.Session()
+        last_orientation: str | None = None
+        while not stop_event.is_set():
+            try:
+                response = session.get(gyro_url, timeout=timeout_sec)
+                response.raise_for_status()
+                data = response.json()
+                orientation = _normalize_orientation(data.get("gyro_orientation"))
+                if orientation and orientation != last_orientation:
+                    profile = LEVEL_BY_ORIENTATION[orientation]
+                    print(f"[mode] Orientation={orientation} -> {profile.name}")
+                    if profile.announcement.strip():
+                        with speak_lock:
+                            tts.speak(profile.announcement)
+                    last_orientation = orientation
+            except Exception as exc:
+                print(f"[warn] Gyro polling error: {exc}")
+
+            if stop_event.wait(poll_interval_sec):
+                break
+
+    thread = threading.Thread(target=_worker, name="gyro-level-controller", daemon=True)
+    thread.start()
+    return stop_event
+
+
 def main() -> None:
     cfg = AssistantConfig()
     
@@ -20,6 +102,7 @@ def main() -> None:
     print(f"  Whisper: {cfg.whisper_model_size} on {cfg.whisper_device} ({cfg.whisper_compute_type})")
     print(f"  Ollama: {cfg.ollama_model} at {cfg.ollama_url}")
     print(f"  System prompt enabled: {bool(cfg.ollama_system_prompt.strip())}")
+    print(f"  Gyro levels: enabled={bool(cfg.gyro_url.strip())} url={cfg.gyro_url or '(not set)'}")
     print(f"  Piper: {cfg.piper_executable} with model {cfg.piper_model_path}")
     print(f"  Pi playback: {cfg.pi_play_url} (timeout {cfg.pi_play_timeout_sec}s)")
     print(f"  Pi websocket: enabled={cfg.pi_ws_enabled} url={cfg.pi_ws_url or '(not set)'}")
@@ -44,12 +127,17 @@ def main() -> None:
     )
 
     print("Connecting to Ollama...")
+    default_stem_prompt = (
+        "You are a general STEM assistant. Answer science, technology, engineering, and math questions "
+        "clearly and practically in plain text."
+    )
+    base_system_prompt = cfg.ollama_system_prompt.strip() or default_stem_prompt
     llm = OllamaClient(
         url=cfg.ollama_url,
         model=cfg.ollama_model,
         keep_alive=cfg.ollama_keep_alive,
         timeout_sec=cfg.ollama_timeout_sec,
-        system_prompt=cfg.ollama_system_prompt,
+        system_prompt=base_system_prompt,
     )
 
     print("Loading Piper TTS...")
@@ -86,6 +174,19 @@ def main() -> None:
     print("Assistant is live. Speak naturally. Press Ctrl+C to stop.")
 
     recorder.start()
+    speak_lock = threading.Lock()
+    gyro_stop_event: threading.Event | None = None
+
+    if cfg.gyro_url.strip():
+        print(f"[mode] Starting gyro level controller: {cfg.gyro_url}")
+        gyro_stop_event = _start_gyro_level_controller(
+            gyro_url=cfg.gyro_url,
+            timeout_sec=cfg.gyro_timeout_sec,
+            poll_interval_sec=cfg.gyro_poll_interval_sec,
+            tts=tts,
+            speak_lock=speak_lock,
+        )
+
     try:
         while True:
             audio = recorder.listen_for_utterance()
@@ -110,7 +211,8 @@ def main() -> None:
             print(f"[assistant] {reply}")
 
             try:
-                tts.speak(reply)
+                with speak_lock:
+                    tts.speak(reply)
             except Exception as exc:
                 print(f"[warn] TTS/playback failed: {exc}")
     except KeyboardInterrupt:
@@ -119,6 +221,10 @@ def main() -> None:
         print("[error] Unhandled exception in assistant loop:")
         traceback.print_exc()
     finally:
+        if gyro_stop_event is not None:
+            gyro_stop_event.set()
+            # Small grace period to let the daemon thread exit cleanly.
+            time.sleep(0.05)
         recorder.stop()
 
 

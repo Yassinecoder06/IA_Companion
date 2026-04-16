@@ -17,4 +17,4 @@ while True:
     except Exception as e:
         print("Connection error:", e)
 
-    time.sleep(0.05) 
+    time.sleep(0.2) 

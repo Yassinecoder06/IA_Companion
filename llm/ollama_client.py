@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+
 import requests
 
 
@@ -18,16 +20,24 @@ class OllamaClient:
         self.timeout_sec = timeout_sec
         self.system_prompt = system_prompt
         self.session = requests.Session()
+        self._lock = threading.Lock()
+
+    def set_system_prompt(self, system_prompt: str) -> None:
+        with self._lock:
+            self.system_prompt = system_prompt
 
     def generate(self, prompt: str) -> str:
+        with self._lock:
+            system_prompt = self.system_prompt
+
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
             "keep_alive": self.keep_alive,
         }
-        if self.system_prompt:
-            payload["system"] = self.system_prompt
+        if system_prompt:
+            payload["system"] = system_prompt
         response = self.session.post(self.url, json=payload, timeout=self.timeout_sec)
         response.raise_for_status()
         data = response.json()
