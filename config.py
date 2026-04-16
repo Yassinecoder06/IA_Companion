@@ -61,6 +61,7 @@ class AssistantConfig:
     ollama_system_prompt: str = os.getenv("VA_OLLAMA_SYSTEM_PROMPT", "")
 
     gyro_url: str = os.getenv("VA_GYRO_URL", "")
+    gyro_ws_url: str = os.getenv("VA_GYRO_WS_URL", "")
     gyro_poll_interval_sec: float = float(os.getenv("VA_GYRO_POLL_INTERVAL", "0.1"))
     gyro_timeout_sec: float = float(os.getenv("VA_GYRO_TIMEOUT", "1.0"))
 

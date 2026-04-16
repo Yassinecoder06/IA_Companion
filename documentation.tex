@@ -91,7 +91,7 @@ The hardware platform is centered on a Raspberry Pi integrated with:
 \end{itemize}
 
 \subsection{Software Overview}
-The software stack is implemented in Python and organized into modules for audio capture, VAD, STT, LLM communication, TTS generation, and playback transport. The assistant runtime orchestrates these modules and includes a concurrent orientation polling mechanism that plays spoken mode announcements and rules in real time.
+The software stack is implemented in Python and organized into modules for audio capture, VAD, STT, LLM communication, TTS generation, and playback transport. The assistant runtime orchestrates these modules and includes a concurrent orientation transport layer that receives gyro updates over WebSocket (preferred) with HTTP polling fallback.
 
 \section{Hardware Architecture}
 
@@ -184,7 +184,7 @@ Piper produces a WAV response from text. The runtime then attempts WebSocket pla
 \section{Sensor Integration}
 
 \subsection{GPIO Architecture}
-Sensor data is exposed through a Raspberry Pi endpoint and consumed by polling logic. This architecture decouples hardware sampling from assistant inference while preserving near-real-time control signals.
+Sensor data is exposed through a Raspberry Pi endpoint and consumed by the assistant through two paths: WebSocket push streaming for primary real-time updates and HTTP polling fallback for compatibility. This architecture decouples hardware sampling from assistant inference while preserving near-real-time control signals.
 
 \subsection{Light Sensor Usage}
 Light sensor values support optical educational interactions and can guide experiment-style responses or game state decisions.
@@ -193,7 +193,7 @@ Light sensor values support optical educational interactions and can guide exper
 Button states can be used to trigger gameplay interactions, control state transitions, and provide direct tactile feedback in educational scenarios.
 
 \subsection{Gyroscope Orientation Detection}
-The orientation field is monitored continuously. Valid values are normalized and mapped to educational modes. This mapping drives spoken announcements and game-rule guidance.
+The orientation field is monitored continuously. In the current implementation, the assistant first attempts to receive pushed JSON frames over WebSocket and falls back to HTTP endpoint polling if needed. Valid values are normalized and mapped to educational modes. This mapping drives spoken announcements and game-rule guidance.
 
 \section{Orientation-Based Mode System}
 
@@ -215,7 +215,7 @@ left & Silent & No TTS output. \\
 \subsection{Runtime Switching Logic}
 When the detected orientation changes:
 \begin{enumerate}
-    \item Poll sensor endpoint and parse gyro orientation.
+    \item Receive gyro payload from WebSocket stream, or poll HTTP endpoint as fallback.
     \item Normalize orientation string.
     \item Lookup matching mode profile.
     \item Speak level announcement or game rules through TTS.
@@ -242,7 +242,7 @@ Two lock-based safeguards were introduced:
 \end{itemize}
 
 \subsection{Reliability Characteristics}
-The gyro poller runs in a daemon thread and continues operation across transient endpoint failures, logging warnings and retrying based on configured polling intervals. This approach improves robustness for real-world sensor intermittency.
+The gyro transport worker runs in a daemon thread and continues operation across transient endpoint failures. In WebSocket mode, the client reconnects automatically on connection loss; in HTTP mode, polling retries continue based on configured intervals. This approach improves robustness for real-world sensor intermittency.
 
 \section{Environment Configuration}
 Configuration is loaded from environment variables via .env parsing in config.py. Key runtime parameters include:
@@ -250,12 +250,13 @@ Configuration is loaded from environment variables via .env parsing in config.py
     \item Audio and VAD parameters: sample rate, chunk duration, speech thresholds.
     \item STT parameters: Whisper model, device, compute type.
     \item LLM parameters: Ollama URL, model, keep alive, timeout, base system prompt.
-    \item Gyro parameters: URL, polling interval, request timeout.
+    \item Gyro parameters: WebSocket URL, HTTP URL fallback, polling interval, request timeout.
     \item TTS and playback parameters: Piper binary/model/config, WebSocket and HTTP playback settings.
 \end{itemize}
 
 Important recently added keys:
 \begin{itemize}
+    \item VA\_GYRO\_WS\_URL
     \item VA\_GYRO\_URL
     \item VA\_GYRO\_POLL\_INTERVAL
     \item VA\_GYRO\_TIMEOUT
@@ -268,6 +269,21 @@ The IA Companion demonstrates a practical embedded AI assistant architecture tha
 
 \subsection*{A.1 Face-Driven Announcement Logic}
 \begin{lstlisting}[style=pythonstyle]
+def next_orientation(payload, last_orientation):
+    orientation = normalize(payload.get("gyro_orientation"))
+    if not orientation or orientation == last_orientation:
+        return last_orientation
+
+    announcement = LEVEL_BY_ORIENTATION[orientation]
+    if announcement.strip():
+        with speak_lock:
+            tts.speak(announcement)
+    return orientation
+
+# Transport strategy:
+# 1) Try WebSocket stream from VA_GYRO_WS_URL
+# 2) Fallback to HTTP polling via VA_GYRO_URL
+
 LEVEL_BY_ORIENTATION = {
     "front": (
         "Logic gate level activated. "
@@ -284,12 +300,6 @@ LEVEL_BY_ORIENTATION = {
     "back": "",
     "left": "",
 }
-
-if orientation and orientation != last_orientation:
-    announcement = LEVEL_BY_ORIENTATION[orientation]
-    if announcement.strip():
-        with speak_lock:
-            tts.speak(announcement)
 \end{lstlisting}
 
 \subsection*{A.2 Architecture Overview Diagram}

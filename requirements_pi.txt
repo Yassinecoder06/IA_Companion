@@ -3,7 +3,7 @@
 # - servers_in_pi/audio_server.py
 
 RPi.GPIO>=0.7.1
-websockets>=12.0
+websockets>=12,<13
 
 # Note:
 # gpio_server.py imports `smbus`, which is usually provided by the OS package
@@ -11,3 +11,6 @@ websockets>=12.0
 # Install on Pi with:
 #   sudo apt update
 #   sudo apt install -y python3-smbus i2c-tools
+#
+# websockets is pinned to v12.x for compatibility with current server code
+# that uses websockets.http11.Response and process_request behavior.

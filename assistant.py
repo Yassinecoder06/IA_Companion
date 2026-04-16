@@ -4,9 +4,11 @@ import threading
 import time
 import traceback
 from dataclasses import dataclass
+import json
 
 import requests
 import torch
+import websocket
 
 from audio.recorder import VoiceRecorder
 from config import AssistantConfig
@@ -60,12 +62,62 @@ def _normalize_orientation(value: str | None) -> str | None:
 
 def _start_gyro_level_controller(
     gyro_url: str,
+    gyro_ws_url: str,
     timeout_sec: float,
     poll_interval_sec: float,
     tts: PiperEngine,
     speak_lock: threading.Lock,
 ) -> threading.Event:
     stop_event = threading.Event()
+
+    def _handle_orientation(orientation: str | None, last_orientation: str | None) -> str | None:
+        if not orientation or orientation == last_orientation:
+            return last_orientation
+
+        profile = LEVEL_BY_ORIENTATION[orientation]
+        print(f"[mode] Orientation={orientation} -> {profile.name}")
+        if profile.announcement.strip():
+            with speak_lock:
+                tts.speak(profile.announcement)
+        return orientation
+
+    def _worker_ws() -> None:
+        ws_url = gyro_ws_url.strip()
+        if not ws_url:
+            return
+
+        reconnect_delay_sec = max(0.5, poll_interval_sec)
+        last_orientation: str | None = None
+
+        while not stop_event.is_set():
+            ws = None
+            try:
+                ws = websocket.create_connection(ws_url, timeout=timeout_sec)
+                print(f"[mode] Gyro WS connected: {ws_url}")
+
+                while not stop_event.is_set():
+                    message = ws.recv()
+                    if message is None:
+                        break
+
+                    if isinstance(message, (bytes, bytearray)):
+                        payload = message.decode("utf-8", errors="ignore")
+                    else:
+                        payload = str(message)
+
+                    data = json.loads(payload)
+                    orientation = _normalize_orientation(data.get("gyro_orientation"))
+                    last_orientation = _handle_orientation(orientation, last_orientation)
+            except Exception as exc:
+                print(f"[warn] Gyro WS error: {exc}")
+                if stop_event.wait(reconnect_delay_sec):
+                    break
+            finally:
+                if ws is not None:
+                    try:
+                        ws.close()
+                    except Exception:
+                        pass
 
     def _worker() -> None:
         session = requests.Session()
@@ -76,20 +128,17 @@ def _start_gyro_level_controller(
                 response.raise_for_status()
                 data = response.json()
                 orientation = _normalize_orientation(data.get("gyro_orientation"))
-                if orientation and orientation != last_orientation:
-                    profile = LEVEL_BY_ORIENTATION[orientation]
-                    print(f"[mode] Orientation={orientation} -> {profile.name}")
-                    if profile.announcement.strip():
-                        with speak_lock:
-                            tts.speak(profile.announcement)
-                    last_orientation = orientation
+                last_orientation = _handle_orientation(orientation, last_orientation)
             except Exception as exc:
                 print(f"[warn] Gyro polling error: {exc}")
 
             if stop_event.wait(poll_interval_sec):
                 break
 
-    thread = threading.Thread(target=_worker, name="gyro-level-controller", daemon=True)
+    if gyro_ws_url.strip():
+        thread = threading.Thread(target=_worker_ws, name="gyro-level-controller-ws", daemon=True)
+    else:
+        thread = threading.Thread(target=_worker, name="gyro-level-controller-http", daemon=True)
     thread.start()
     return stop_event
 
@@ -103,6 +152,7 @@ def main() -> None:
     print(f"  Ollama: {cfg.ollama_model} at {cfg.ollama_url}")
     print(f"  System prompt enabled: {bool(cfg.ollama_system_prompt.strip())}")
     print(f"  Gyro levels: enabled={bool(cfg.gyro_url.strip())} url={cfg.gyro_url or '(not set)'}")
+    print(f"  Gyro WS: {cfg.gyro_ws_url or '(not set)'}")
     print(f"  Piper: {cfg.piper_executable} with model {cfg.piper_model_path}")
     print(f"  Pi playback: {cfg.pi_play_url} (timeout {cfg.pi_play_timeout_sec}s)")
     print(f"  Pi websocket: enabled={cfg.pi_ws_enabled} url={cfg.pi_ws_url or '(not set)'}")
@@ -177,10 +227,14 @@ def main() -> None:
     speak_lock = threading.Lock()
     gyro_stop_event: threading.Event | None = None
 
-    if cfg.gyro_url.strip():
-        print(f"[mode] Starting gyro level controller: {cfg.gyro_url}")
+    if cfg.gyro_ws_url.strip() or cfg.gyro_url.strip():
+        if cfg.gyro_ws_url.strip():
+            print(f"[mode] Starting gyro level controller (WS): {cfg.gyro_ws_url}")
+        else:
+            print(f"[mode] Starting gyro level controller (HTTP): {cfg.gyro_url}")
         gyro_stop_event = _start_gyro_level_controller(
             gyro_url=cfg.gyro_url,
+            gyro_ws_url=cfg.gyro_ws_url,
             timeout_sec=cfg.gyro_timeout_sec,
             poll_interval_sec=cfg.gyro_poll_interval_sec,
             tts=tts,

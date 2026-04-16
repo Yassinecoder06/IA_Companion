@@ -1,10 +1,14 @@
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import asyncio
 import json
 import RPi.GPIO as GPIO
 import smbus
 import time
+import websockets
+from websockets.datastructures import Headers
+from websockets.http11 import Response
 
 PORT = 6000
+WS_PUSH_INTERVAL = 0.1
 
 # ---------------- GPIO ----------------
 BUTTON_PINS = [4, 17, 27]
@@ -104,53 +108,73 @@ def get_orientation():
 
 
 # ---------------- SERVER ----------------
-class GPIOHandler(BaseHTTPRequestHandler):
+def build_gpio_data():
 
-    def do_GET(self):
+    global gyro_enabled
 
-        global gyro_enabled
+    button_states = {pin: GPIO.input(pin) for pin in BUTTON_PINS}
+    light_states = {pin: GPIO.input(pin) for pin in LIGHT_PINS}
 
-        if self.path != "/gpio":
-            self.send_response(404)
-            self.end_headers()
-            return
+    if not gyro_enabled:
+        if all(GPIO.input(pin) == 0 for pin in BUTTON_PINS):
+            print("Gyro activated")
+            gyro_enabled = True
 
-        button_states = {pin: GPIO.input(pin) for pin in BUTTON_PINS}
-        light_states = {pin: GPIO.input(pin) for pin in LIGHT_PINS}
+    gyro_state = None
+    raw_velocity = None
 
-        if not gyro_enabled:
-            if all(GPIO.input(pin) == 0 for pin in BUTTON_PINS):
-                print("Gyro activated")
-                gyro_enabled = True
+    if gyro_enabled:
+        raw_velocity = update_face()
+        gyro_state = get_orientation()
 
-        gyro_state = None
-        raw_velocity = None
+    return {
+        "buttons": button_states,
+        "lights": light_states,
+        "gyro_enabled": gyro_enabled,
+        "gyro_orientation": gyro_state,
+        "raw_velocity": raw_velocity
+    }
 
-        if gyro_enabled:
-            raw_velocity = update_face()
-            gyro_state = get_orientation()
 
-        data = {
-            "buttons": button_states,
-            "lights": light_states,
-            "gyro_enabled": gyro_enabled,
-            "gyro_orientation": gyro_state,
-            "raw_velocity": raw_velocity
-        }
+async def ws_handler(websocket):
+    try:
+        while True:
+            data = build_gpio_data()
+            await websocket.send(json.dumps(data))
+            await asyncio.sleep(WS_PUSH_INTERVAL)
+    except websockets.exceptions.ConnectionClosed:
+        pass
 
-        response = json.dumps(data).encode()
 
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        self.wfile.write(response)
+def process_request(connection, request):
+    upgrade = request.headers.get("Upgrade", "").lower()
+
+    if "websocket" in upgrade:
+        return None
+
+    if request.path == "/gpio":
+        body = json.dumps(build_gpio_data()).encode()
+        headers = Headers()
+        headers["Content-Type"] = "application/json"
+        headers["Content-Length"] = str(len(body))
+        headers["Connection"] = "close"
+        return Response(200, "OK", headers, body)
+
+    body = b"WebSocket endpoint available at ws://<host>:6000\n"
+    headers = Headers()
+    headers["Content-Type"] = "text/plain; charset=utf-8"
+    headers["Content-Length"] = str(len(body))
+    headers["Connection"] = "close"
+    return Response(426, "Upgrade Required", headers, body)
 
 
 # ---------------- START ----------------
 gyro_bias = calibrate_gyro()
 
-server = HTTPServer(("0.0.0.0", PORT), GPIOHandler)
+async def main():
+    async with websockets.serve(ws_handler, "0.0.0.0", PORT, process_request=process_request):
+        print(f"WebSocket server running on port {PORT}")
+        await asyncio.Future()
 
-print(f"Server running on port {PORT}")
 
-server.serve_forever()
+asyncio.run(main())
