@@ -1,8 +1,57 @@
-﻿# Local Voice Assistant + Raspberry Pi Speaker Output
+﻿# IA Companion: Smart Learning Companion for STEM Education
 
-This project runs STT/LLM/TTS fully on your PC (no cloud APIs), then sends generated WAV audio to your Raspberry Pi playback server:
+This project was built for the Smart Learning Companion Challenge in the IEEE Education Society ecosystem. The goal is to make STEM learning more interactive, accessible, and engaging by combining edge AI, real hardware, and immersive visualization.
 
-Microphone -> Silero VAD -> faster-whisper STT -> TinyLlama (Ollama localhost API) -> Piper TTS (WAV) -> POST http://jmalpi.local:5000/play -> Raspberry Pi speakers
+IA Companion is a portable AI-powered system where students can talk to the assistant, interact with physical sensors, and see cause and effect in a virtual simulation.
+
+## Why This Project Matters
+
+Instead of passive learning, students can perform hands-on experimentation:
+
+- Use real inputs: light sensors, gyroscope orientation, and physical buttons on a Raspberry Pi.
+- Ask questions naturally through voice.
+- Hear AI explanations in real time.
+- See physical actions reflected in a 3D Unreal Engine environment.
+
+This creates a learning loop between physical interaction, AI reasoning, and visual feedback.
+
+## Core System Architecture
+
+### Voice + AI Pipeline
+
+```text
+Microphone
+  -> Silero VAD (speech detection)
+  -> faster-whisper STT
+  -> Ollama LLM (local on Pi or remote machine)
+  -> Piper TTS (WAV)
+  -> Raspberry Pi playback endpoint
+  -> Speaker output
+```
+
+### Hardware + Simulation Bridge
+
+```text
+Raspberry Pi GPIO sensors/buttons
+  -> Pi sensor server
+  -> WebSocket/HTTP bridge
+  -> Unreal Engine interactive scene
+
+AI responses/events
+  -> WebSocket events
+  -> Virtual experiment reactions
+```
+
+This means students can manipulate real hardware and instantly observe the effect inside a virtual experiment.
+
+## Key Features
+
+- AI reasoning with Ollama (local-first, edge-ready).
+- Voice interface with Whisper (STT) and Piper (TTS).
+- Raspberry Pi sensor integration (light, gyro, buttons).
+- GPIO-driven interaction patterns for STEM mini-experiments.
+- Unreal Engine integration through WebSockets.
+- Flexible deployment: all-local or split across Pi + remote machine.
 
 ## What Is Already Done In This Folder
 
@@ -17,56 +66,16 @@ The following setup has already been completed on this machine:
 
 If you move this project to another machine, follow the full first-time setup below.
 
-## Architecture
-
-```text
-+------------------+
-|   Microphone     |
-+---------+--------+
-          |
-          v
-+------------------+
-|   Silero VAD     |  Detect speech start/end
-+---------+--------+
-          |
-          v
-+------------------+
-| faster-whisper   |  STT (small/base)
-+---------+--------+
-          |
-          v
-+------------------------------+
-| Ollama API (localhost:11434) |
-| model: tinyllama             |
-+---------+--------------------+
-          |
-          v
-+------------------+
-|    Piper TTS     |  medium voice model
-+---------+--------+
-          |
-          v
-+----------------------------------+
-| POST /play on Raspberry Pi |
-| http://jmalpi.local:5000/play    |
-+---------+------------------------+
-          |
-          v
-+------------------+
-| Raspberry Speaker|
-+------------------+
-```
-
 ## Project Structure
 
 ```text
 .
-|-- .env
-|-- .env.example
 |-- README.md
 |-- requirements.txt
+|-- requirements_pi.txt
 |-- config.py
 |-- assistant.py
+|-- listen.py
 |-- audio/
 |   |-- recorder.py
 |-- stt/
@@ -79,6 +88,9 @@ If you move this project to another machine, follow the full first-time setup be
 |   |-- piper_engine.py
 |-- utils/
 |   |-- audio_utils.py
+|-- servers_in_pi/
+|   |-- audio_server.py
+|   |-- gpio_server.py
 |-- models/
 |   |-- en_US-lessac-medium.onnx
 |   |-- en_US-lessac-medium.onnx.json
@@ -213,6 +225,15 @@ During each response, the PC sends raw WAV bytes to your Raspberry Pi endpoint:
 
 - `POST http://jmalpi.local:5000/play`
 
+## Raspberry Pi Services (Optional Split Deployment)
+
+If you run hardware services on the Pi, use the scripts under `servers_in_pi/`:
+
+- `audio_server.py` for audio playback endpoint
+- `gpio_server.py` for sensor and GPIO state serving
+
+Install Pi-side dependencies from `requirements_pi.txt`.
+
 ## One-Time Model Warmup (Optional but Recommended)
 
 This pre-downloads model files so first voice request is faster.
@@ -273,3 +294,13 @@ No microphone input:
 
 - Check OS microphone permissions.
 - Ensure default input device is correct.
+
+## Challenge Alignment
+
+This project aligns directly with the Smart Learning Companion Challenge vision:
+
+- AI + IoT integration for practical STEM education.
+- Edge-first design for responsiveness and privacy.
+- Interactive learning through physical experimentation and simulation.
+
+It is a foundation for next-generation AI companions that help students learn by doing, not only by watching.
